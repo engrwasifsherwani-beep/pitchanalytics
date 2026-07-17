@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PitchAnalytics — Football Data Science Lab</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060A0E;
+    --surface: #0D1318;
+    --green: #00FF9F;
+    --blue: #00D1FF;
+    --dim: #1A2330;
+    --text: #E8EDF2;
+    --muted: #5A7080;
+    --border: rgba(0,255,159,0.12);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth;overflow-x:hidden}
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow-x:hidden;cursor:none}
+
+  /* CUSTOM CURSOR */
+  #cursor{position:fixed;width:12px;height:12px;background:var(--green);border-radius:50%;pointer-events:none;z-index:9999;mix-blend-mode:screen;transition:transform 0.15s ease,opacity 0.2s;transform:translate(-50%,-50%)}
+  #cursor-ring{position:fixed;width:40px;height:40px;border:1px solid rgba(0,255,159,0.4);border-radius:50%;pointer-events:none;z-index:9998;transform:translate(-50%,-50%);transition:width 0.3s,height 0.3s,border-color 0.3s}
+  body:hover #cursor{opacity:1}
+
+  /* NAV */
+  nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:24px 60px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(180deg,rgba(6,10,14,0.9) 0%,transparent 100%);backdrop-filter:blur(2px)}
+  .nav-logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:3px;color:var(--green);text-decoration:none}
+  .nav-logo span{color:var(--text);opacity:0.5}
+  .nav-links{display:flex;gap:36px;list-style:none}
+  .nav-links a{color:var(--muted);text-decoration:none;font-size:12px;letter-spacing:2px;text-transform:uppercase;font-weight:500;transition:color 0.3s;font-family:'JetBrains Mono',monospace}
+  .nav-links a:hover{color:var(--green)}
+  .nav-cta{border:1px solid var(--green);color:var(--green);padding:8px 20px;font-size:11px;letter-spacing:2px;text-transform:uppercase;text-decoration:none;font-family:'JetBrains Mono',monospace;transition:all 0.3s}
+  .nav-cta:hover{background:var(--green);color:var(--bg)}
+
+  /* CANVAS */
+  #hero-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+  /* HERO */
+  #hero{position:relative;height:100vh;display:flex;align-items:center;justify-content:center;z-index:10;pointer-events:none}
+  .hero-content{text-align:center;pointer-events:auto}
+  .hero-label{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:4px;color:var(--green);text-transform:uppercase;margin-bottom:24px;opacity:0}
+  .hero-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(64px,10vw,128px);line-height:0.92;letter-spacing:2px;margin-bottom:28px;opacity:0}
+  .hero-title .line2{color:transparent;-webkit-text-stroke:1px rgba(0,255,159,0.5)}
+  .hero-sub{font-size:16px;color:var(--muted);max-width:480px;margin:0 auto 40px;line-height:1.7;font-weight:300;opacity:0}
+  .hero-btns{display:flex;gap:16px;justify-content:center;opacity:0}
+  .btn-primary{background:var(--green);color:var(--bg);padding:14px 32px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;text-decoration:none;font-weight:400;transition:all 0.3s;position:relative;overflow:hidden}
+  .btn-primary::before{content:'';position:absolute;inset:0;background:var(--blue);transform:translateX(-100%);transition:transform 0.4s}
+  .btn-primary:hover::before{transform:translateX(0)}
+  .btn-primary span{position:relative;z-index:1}
+  .btn-secondary{border:1px solid var(--border);color:var(--text);padding:14px 32px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:2px;text-transform:uppercase;text-decoration:none;transition:all 0.3s}
+  .btn-secondary:hover{border-color:var(--green);color:var(--green)}
+  .scroll-hint{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;opacity:0}
+  .scroll-hint span{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--muted);text-transform:uppercase}
+  .scroll-line{width:1px;height:60px;background:linear-gradient(180deg,var(--green),transparent);animation:scrollPulse 2s ease-in-out infinite}
+  @keyframes scrollPulse{0%,100%{opacity:0.3;transform:scaleY(0.5)}50%{opacity:1;transform:scaleY(1)}}
+
+  /* SECTIONS SHARED */
+  section{position:relative;z-index:10;pointer-events:auto}
+  .section-inner{max-width:1200px;margin:0 auto;padding:0 60px}
+  .section-label{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:4px;color:var(--green);text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:12px}
+  .section-label::before{content:'';display:block;width:24px;height:1px;background:var(--green)}
+  .section-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(48px,6vw,80px);line-height:0.95;margin-bottom:24px}
+
+  /* ABOUT */
+  #about{padding:160px 0;background:linear-gradient(180deg,transparent,var(--surface) 30%,var(--surface) 70%,transparent)}
+  .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;margin-top:60px}
+  .about-text p{color:var(--muted);font-size:15px;line-height:1.9;margin-bottom:20px;font-weight:300}
+  .about-text p strong{color:var(--text);font-weight:500}
+  .identity-pills{display:flex;flex-wrap:wrap;gap:10px;margin-top:32px}
+  .pill{border:1px solid var(--border);padding:8px 18px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1px;color:var(--green);position:relative;overflow:hidden}
+  .pill::before{content:'';position:absolute;inset:0;background:rgba(0,255,159,0.05)}
+  .about-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}
+  .stat-box{background:var(--bg);padding:40px 32px;position:relative;overflow:hidden}
+  .stat-box::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--green),transparent);transform:scaleX(0);transform-origin:left;transition:transform 0.6s}
+  .stat-box:hover::after{transform:scaleX(1)}
+  .stat-num{font-family:'Bebas Neue',sans-serif;font-size:64px;color:var(--green);line-height:1;margin-bottom:8px}
+  .stat-desc{font-size:12px;color:var(--muted);letter-spacing:1px;font-family:'JetBrains Mono',monospace;text-transform:uppercase}
+
+  /* PROJECTS */
+  #projects{padding:160px 0}
+  .projects-header{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:60px}
+  .projects-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border)}
+  .project-card{background:var(--bg);padding:40px 36px;position:relative;overflow:hidden;cursor:pointer;transition:background 0.4s}
+  .project-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--green),var(--blue));transform:scaleX(0);transform-origin:left;transition:transform 0.5s}
+  .project-card:hover{background:var(--surface)}
+  .project-card:hover::before{transform:scaleX(1)}
+  .project-num{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:2px;margin-bottom:28px}
+  .project-icon{width:48px;height:48px;margin-bottom:24px;position:relative}
+  .project-icon svg{width:100%;height:100%}
+  .project-name{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:1px;margin-bottom:12px;line-height:1.1}
+  .project-desc{font-size:13px;color:var(--muted);line-height:1.8;margin-bottom:24px;font-weight:300}
+  .project-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
+  .tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--blue);border:1px solid rgba(0,209,255,0.2);padding:4px 10px}
+  .project-arrow{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green);letter-spacing:2px;display:flex;align-items:center;gap:8px;transition:gap 0.3s}
+  .project-card:hover .project-arrow{gap:16px}
+  .mini-viz{height:60px;margin-bottom:20px;position:relative;overflow:hidden}
+  .mini-viz canvas{width:100%!important;height:100%!important}
+
+  /* RESEARCH */
+  #research{padding:160px 0;background:var(--surface)}
+  .research-list{margin-top:60px;display:flex;flex-direction:column;gap:1px;background:var(--border)}
+  .research-item{background:var(--bg);padding:36px 40px;display:grid;grid-template-columns:1fr auto;gap:40px;align-items:center;cursor:pointer;transition:background 0.3s;position:relative;overflow:hidden}
+  .research-item::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--green),var(--blue));transform:scaleY(0);transition:transform 0.4s}
+  .research-item:hover{background:var(--surface)}
+  .research-item:hover::before{transform:scaleY(1)}
+  .research-title{font-family:'Bebas Neue',sans-serif;font-size:22px;margin-bottom:10px;letter-spacing:0.5px}
+  .research-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:1px}
+  .research-abstract{font-size:13px;color:var(--muted);margin-top:10px;line-height:1.7;font-weight:300;max-width:600px}
+  .status-badge{padding:6px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;white-space:nowrap}
+  .status-published{border:1px solid var(--green);color:var(--green)}
+  .status-review{border:1px solid rgba(0,209,255,0.5);color:var(--blue)}
+  .status-draft{border:1px solid rgba(255,255,255,0.1);color:var(--muted)}
+
+  /* TACTICAL */
+  #tactical{padding:160px 0}
+  .tactical-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:start;margin-top:60px}
+  #tactical-canvas-wrap{background:var(--surface);border:1px solid var(--border);position:relative;overflow:hidden}
+  #tactical-canvas-wrap canvas{display:block;width:100%!important}
+  .tactical-controls{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+  .tac-btn{padding:8px 16px;background:transparent;border:1px solid var(--border);color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:all 0.3s}
+  .tac-btn.active,.tac-btn:hover{border-color:var(--green);color:var(--green);background:rgba(0,255,159,0.05)}
+  .philosophy-points{display:flex;flex-direction:column;gap:24px;margin-top:32px}
+  .phi-point{padding:24px;border-left:2px solid var(--border);transition:border-color 0.3s}
+  .phi-point:hover{border-color:var(--green)}
+  .phi-title{font-family:'Bebas Neue',sans-serif;font-size:20px;margin-bottom:8px;letter-spacing:0.5px}
+  .phi-desc{font-size:13px;color:var(--muted);line-height:1.7;font-weight:300}
+
+  /* MEDIA */
+  #media{padding:160px 0;background:var(--surface)}
+  .media-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:60px}
+  .video-card{position:relative;aspect-ratio:16/9;background:var(--dim);overflow:hidden;cursor:pointer}
+  .video-thumb{width:100%;height:100%;object-fit:cover;opacity:0.6;transition:opacity 0.4s,transform 0.6s}
+  .video-card:hover .video-thumb{opacity:1;transform:scale(1.04)}
+  .video-overlay{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:20px;background:linear-gradient(0deg,rgba(6,10,14,0.9) 0%,transparent 60%)}
+  .video-title{font-size:13px;font-weight:500;margin-bottom:6px}
+  .video-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px}
+  .play-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;border:1.5px solid var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background 0.3s,transform 0.3s}
+  .video-card:hover .play-btn{background:rgba(0,255,159,0.15);transform:translate(-50%,-50%) scale(1.1)}
+
+  /* CERTS */
+  #certifications{padding:160px 0}
+  .timeline{margin-top:60px;position:relative;padding-left:48px}
+  .timeline::before{content:'';position:absolute;left:0;top:0;bottom:0;width:1px;background:linear-gradient(180deg,var(--green),var(--blue),transparent)}
+  .tl-item{position:relative;padding-bottom:48px}
+  .tl-dot{position:absolute;left:-55px;top:4px;width:14px;height:14px;border:2px solid var(--green);background:var(--bg);border-radius:50%;transition:background 0.3s}
+  .tl-item:hover .tl-dot{background:var(--green)}
+  .tl-year{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green);letter-spacing:2px;margin-bottom:8px}
+  .tl-title{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:0.5px;margin-bottom:6px}
+  .tl-org{font-size:13px;color:var(--muted);font-weight:300}
+
+  /* CONTACT */
+  #contact{padding:160px 0 120px;background:var(--surface)}
+  .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;margin-top:60px;align-items:start}
+  .contact-info p{font-size:15px;color:var(--muted);line-height:1.9;margin-bottom:32px;font-weight:300}
+  .contact-links{display:flex;flex-direction:column;gap:16px}
+  .contact-link{display:flex;align-items:center;gap:16px;text-decoration:none;padding:16px 20px;border:1px solid var(--border);transition:all 0.3s}
+  .contact-link:hover{border-color:var(--green);background:rgba(0,255,159,0.03)}
+  .contact-link-icon{width:20px;height:20px;color:var(--green)}
+  .contact-link-text{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);letter-spacing:1px}
+  .contact-form{display:flex;flex-direction:column;gap:16px}
+  .form-field{display:flex;flex-direction:column;gap:8px}
+  .form-label{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--muted);text-transform:uppercase}
+  .form-input,.form-textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:14px 18px;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color 0.3s;resize:none}
+  .form-input:focus,.form-textarea:focus{border-color:var(--green)}
+  .form-textarea{height:120px}
+  .btn-send{background:transparent;border:1px solid var(--green);color:var(--green);padding:14px 32px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;transition:all 0.3s;align-self:flex-start}
+  .btn-send:hover{background:var(--green);color:var(--bg)}
+
+  /* FOOTER */
+  footer{padding:40px 60px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border)}
+  .footer-logo{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:3px;color:var(--green)}
+  .footer-copy{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:1px}
+
+  /* NOISE OVERLAY */
+  .noise{position:fixed;inset:0;pointer-events:none;z-index:200;opacity:0.025;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")}
+
+  /* SCANLINE */
+  .scanline{position:fixed;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--green),transparent);opacity:0.12;animation:scan 8s linear infinite;pointer-events:none;z-index:150}
+  @keyframes scan{0%{top:-2px}100%{top:100vh}}
+
+  /* MOBILE */
+  @media(max-width:768px){
+    nav{padding:20px 24px}
+    .nav-links{display:none}
+    .section-inner{padding:0 24px}
+    .about-grid,.projects-grid,.tactical-grid,.contact-grid{grid-template-columns:1fr}
+    .projects-grid{grid-template-columns:1fr}
+    .media-grid{grid-template-columns:1fr 1fr}
+    .about-stats{grid-template-columns:1fr 1fr}
+    footer{flex-direction:column;gap:16px;text-align:center}
+  }
+
+  /* GLOW EFFECTS */
+  .glow-green{text-shadow:0 0 40px rgba(0,255,159,0.5)}
+  .section-divider{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);margin:0 60px}
+</style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+<div class="noise"></div>
+<div class="scanline"></div>
+
+<canvas id="hero-canvas"></canvas>
+
+<!-- NAV -->
+<nav>
+  <a href="#hero" class="nav-logo">Pitch<span>Analytics</span></a>
+  <ul class="nav-links">
+    <li><a href="#about">About</a></li>
+    <li><a href="#projects">Projects</a></li>
+    <li><a href="#research">Research</a></li>
+    <li><a href="#tactical">Tactical</a></li>
+    <li><a href="#contact">Contact</a></li>
+  </ul>
+  <a href="#contact" class="nav-cta">Hire Me</a>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-content">
+    <div class="hero-label">Football · Data Science · Performance Lab</div>
+    <h1 class="hero-title">
+      <div>Bridging Football,</div>
+      <div class="line2">Data & Performance</div>
+    </h1>
+    <p class="hero-sub">Transforming football through data science, biomechanics, and intelligent systems. From pitch to pipeline.</p>
+    <div class="hero-btns">
+      <a href="#projects" class="btn-primary"><span>Explore Projects</span></a>
+      <a href="#research" class="btn-secondary">View Research</a>
+    </div>
+  </div>
+  <div class="scroll-hint">
+    <span>Scroll</span>
+    <div class="scroll-line"></div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section id="about">
+  <div class="section-inner">
+    <div class="section-label">Control Room</div>
+    <h2 class="section-title">The Analyst<br>Behind The Data</h2>
+    <div class="about-grid">
+      <div class="about-text">
+        <p>I operate at the intersection of <strong>football intelligence, data science, and performance science</strong>. My work fuses quantitative analysis with on-pitch coaching expertise to produce insights that are both statistically rigorous and tactically actionable.</p>
+        <p>With a background spanning <strong>machine learning, biomechanics, and elite youth coaching</strong>, I build systems that help clubs understand player performance at a deeper level — not just what happened, but why, and what comes next.</p>
+        <p>My mission is to reduce uncertainty in football decision-making through <strong>data, models, and research</strong> — one possession at a time.</p>
+        <div class="identity-pills">
+          <span class="pill">Data Scientist</span>
+          <span class="pill">Football Coach</span>
+          <span class="pill">ML Engineer</span>
+          <span class="pill">Biomechanics Researcher</span>
+          <span class="pill">Tactical Analyst</span>
+        </div>
+      </div>
+      <div class="about-stats">
+        <div class="stat-box">
+          <div class="stat-num">47+</div>
+          <div class="stat-desc">Models Deployed</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">12</div>
+          <div class="stat-desc">Research Papers</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">8</div>
+          <div class="stat-desc">Club Partnerships</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">6yr</div>
+          <div class="stat-desc">Coaching Experience</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- PROJECTS -->
+<section id="projects">
+  <div class="section-inner">
+    <div class="projects-header">
+      <div>
+        <div class="section-label">Analytics Engine</div>
+        <h2 class="section-title">Projects</h2>
+      </div>
+    </div>
+    <div class="projects-grid">
+
+      <div class="project-card">
+        <div class="project-num">01 / 06</div>
+        <div class="mini-viz"><canvas id="viz1"></canvas></div>
+        <div class="project-name">xG Prediction Model</div>
+        <div class="project-desc">Deep learning model predicting expected goals with 94.2% AUC, incorporating spatial, contextual, and biomechanical shot features.</div>
+        <div class="project-tags">
+          <span class="tag">Python</span><span class="tag">XGBoost</span><span class="tag">StatsBomb</span>
+        </div>
+        <div class="project-arrow">View Case Study <span>→</span></div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-num">02 / 06</div>
+        <div class="mini-viz"><canvas id="viz2"></canvas></div>
+        <div class="project-name">Pressing Intensity Classifier</div>
+        <div class="project-desc">Unsupervised clustering of pressing behaviors across 5 top leagues. Identified 7 distinct pressing archetypes with actionable tactical implications.</div>
+        <div class="project-tags">
+          <span class="tag">Sklearn</span><span class="tag">K-Means</span><span class="tag">Wyscout</span>
+        </div>
+        <div class="project-arrow">View Case Study <span>→</span></div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-num">03 / 06</div>
+        <div class="mini-viz"><canvas id="viz3"></canvas></div>
+        <div class="project-name">Player Load Optimizer</div>
+        <div class="project-desc">GPS-integrated biomechanical model forecasting injury risk with personalized weekly load thresholds per player profile.</div>
+        <div class="project-tags">
+          <span class="tag">PyTorch</span><span class="tag">GPSports</span><span class="tag">LSTM</span>
+        </div>
+        <div class="project-arrow">View Case Study <span>→</span></div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-num">04 / 06</div>
+        <div class="mini-viz"><canvas id="viz4"></canvas></div>
+        <div class="project-name">Passing Network Analysis</div>
+        <div class="project-desc">Graph-theoretic analysis of team passing structures. Identifies key connectors, centrality shifts, and structural vulnerabilities.</div>
+        <div class="project-tags">
+          <span class="tag">NetworkX</span><span class="tag">D3.js</span><span class="tag">Pandas</span>
+        </div>
+        <div class="project-arrow">View Case Study <span>→</span></div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-num">05 / 06</div>
+        <div class="mini-viz"><canvas id="viz5"></canvas></div>
+        <div class="project-name">Set-Piece Intelligence System</div>
+        <div class="project-desc">Computer vision pipeline tracking 22 players during set pieces. Generates tactical alerts and exploitable pattern reports.</div>
+        <div class="project-tags">
+          <span class="tag">OpenCV</span><span class="tag">YOLO</span><span class="tag">Computer Vision</span>
+        </div>
+        <div class="project-arrow">View Case Study <span>→</span></div>
+      </div>
+
+      <div class="project-card">
+        <div class="project-num">06 / 06</div>
+        <div class="mini-viz"><canvas id="viz6"></canvas></div>
+        <div class="project-name">Transfer Market Valuation</div>
+        <div class="project-desc">Multi-factor valuation model combining performance metrics, age curves, and market dynamics. Tested against 3 seasons of transfer data.</div>
+        <div class="project-tags">
+          <span class="tag">ML</span><span class="tag">Transfermarkt</span><span class="tag">SQL</span>
+        </div>
+        <div class="project-arrow">View Case Study <span>→</span></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- RESEARCH -->
+<section id="research">
+  <div class="section-inner">
+    <div class="section-label">Academic Interface</div>
+    <h2 class="section-title">Research</h2>
+    <div class="research-list">
+
+      <div class="research-item">
+        <div>
+          <div class="research-title">Biomechanical Signatures of Elite Sprinting in Association Football</div>
+          <div class="research-meta">Journal of Sports Science · 2024 · DOI: 10.1080/xxx</div>
+          <div class="research-abstract">Analysis of ground reaction forces and kinematic profiles across 240 elite players, revealing position-specific sprint mechanics with injury prediction implications.</div>
+        </div>
+        <span class="status-badge status-published">Published</span>
+      </div>
+
+      <div class="research-item">
+        <div>
+          <div class="research-title">Graph Neural Networks for Tactical Formation Classification</div>
+          <div class="research-meta">MIT Sloan Sports Analytics Conference · 2025</div>
+          <div class="research-abstract">Novel GNN architecture achieving 97.3% formation classification accuracy across dynamic in-game transitions using tracking data.</div>
+        </div>
+        <span class="status-badge status-published">Published</span>
+      </div>
+
+      <div class="research-item">
+        <div>
+          <div class="research-title">Pressing Efficiency Metrics: A Comprehensive Framework</div>
+          <div class="research-meta">International Journal of Performance Analysis in Sport · 2025</div>
+          <div class="research-abstract">Proposes PPDA-Plus, an enhanced pressing metric incorporating spatial and temporal dimensions beyond raw defensive actions.</div>
+        </div>
+        <span class="status-badge status-review">Under Review</span>
+      </div>
+
+      <div class="research-item">
+        <div>
+          <div class="research-title">Cognitive Load in Elite Coaches: Decision Timing Under Uncertainty</div>
+          <div class="research-meta">Working Paper · 2025</div>
+          <div class="research-abstract">EEG-based study examining how coaching experience modulates cortical response to real-time game state complexity.</div>
+        </div>
+        <span class="status-badge status-draft">Draft</span>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- TACTICAL -->
+<section id="tactical">
+  <div class="section-inner">
+    <div class="section-label">Tactical Board</div>
+    <h2 class="section-title">Football &<br>Coaching</h2>
+    <div class="tactical-grid">
+      <div>
+        <div class="tactical-controls">
+          <button class="tac-btn active" onclick="setFormation('433')">4-3-3</button>
+          <button class="tac-btn" onclick="setFormation('442')">4-4-2</button>
+          <button class="tac-btn" onclick="setFormation('352')">3-5-2</button>
+          <button class="tac-btn" onclick="setFormation('4231')">4-2-3-1</button>
+        </div>
+        <div id="tactical-canvas-wrap">
+          <canvas id="tactical-canvas"></canvas>
+        </div>
+      </div>
+      <div>
+        <div class="section-label" style="margin-top:0">Philosophy</div>
+        <p style="color:var(--muted);font-size:14px;line-height:1.9;margin-bottom:32px;font-weight:300">My coaching philosophy integrates data-driven positional principles with the cognitive demands of high-tempo pressing football — building teams that are both intelligently structured and adaptively chaotic.</p>
+        <div class="philosophy-points">
+          <div class="phi-point">
+            <div class="phi-title">Positional Play Foundation</div>
+            <div class="phi-desc">Structuring space occupation to create numerical and positional superiority in every third of the pitch.</div>
+          </div>
+          <div class="phi-point">
+            <div class="phi-title">High-Press Intensity</div>
+            <div class="phi-desc">Data-calibrated pressing triggers based on opponent ball circulation patterns and recovery positioning.</div>
+          </div>
+          <div class="phi-point">
+            <div class="phi-title">Player Cognitive Development</div>
+            <div class="phi-desc">Building football IQ through constrained training environments that force decision-making under pressure.</div>
+          </div>
+          <div class="phi-point">
+            <div class="phi-title">Transition Asymmetry</div>
+            <div class="phi-desc">Exploiting micro-second windows post-turnover via pre-programmed counter-attack structures.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MEDIA -->
+<section id="media">
+  <div class="section-inner">
+    <div class="section-label">Media Lab</div>
+    <h2 class="section-title">Video Content</h2>
+    <div class="media-grid">
+      <div class="video-card">
+        <img class="video-thumb" src="https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg" alt="video" onerror="this.style.display='none'">
+        <div style="position:absolute;inset:0;background:var(--dim)"></div>
+        <div class="play-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--green)"><path d="M8 5v14l11-7z"/></svg></div>
+        <div class="video-overlay">
+          <div class="video-title">xG Modelling Deep Dive</div>
+          <div class="video-meta">Analytics · 24 min</div>
+        </div>
+      </div>
+      <div class="video-card">
+        <div style="position:absolute;inset:0;background:linear-gradient(135deg,#0D1318,#0B1F2A)"></div>
+        <div class="play-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--green)"><path d="M8 5v14l11-7z"/></svg></div>
+        <div class="video-overlay">
+          <div class="video-title">Pressing Metrics Explained</div>
+          <div class="video-meta">Tactics · 18 min</div>
+        </div>
+      </div>
+      <div class="video-card">
+        <div style="position:absolute;inset:0;background:linear-gradient(135deg,#0D1318,#1A0B2A)"></div>
+        <div class="play-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--green)"><path d="M8 5v14l11-7z"/></svg></div>
+        <div class="video-overlay">
+          <div class="video-title">Python for Football Data</div>
+          <div class="video-meta">Tutorial · 42 min</div>
+        </div>
+      </div>
+      <div class="video-card">
+        <div style="position:absolute;inset:0;background:linear-gradient(135deg,#0D1318,#0B2A1A)"></div>
+        <div class="play-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--green)"><path d="M8 5v14l11-7z"/></svg></div>
+        <div class="video-overlay">
+          <div class="video-title">Biomechanics & GPS Analysis</div>
+          <div class="video-meta">Science · 31 min</div>
+        </div>
+      </div>
+      <div class="video-card">
+        <div style="position:absolute;inset:0;background:linear-gradient(135deg,#0D1318,#2A1A0B)"></div>
+        <div class="play-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--green)"><path d="M8 5v14l11-7z"/></svg></div>
+        <div class="video-overlay">
+          <div class="video-title">Set Piece Intelligence</div>
+          <div class="video-meta">Analysis · 27 min</div>
+        </div>
+      </div>
+      <div class="video-card">
+        <div style="position:absolute;inset:0;background:linear-gradient(135deg,#0D1318,#1A2A0B)"></div>
+        <div class="play-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="var(--green)"><path d="M8 5v14l11-7z"/></svg></div>
+        <div class="video-overlay">
+          <div class="video-title">Transfer Market Valuation</div>
+          <div class="video-meta">Research · 35 min</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- CERTIFICATIONS -->
+<section id="certifications">
+  <div class="section-inner">
+    <div class="section-label">Credentials</div>
+    <h2 class="section-title">Education &<br>Certifications</h2>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-year">2024</div>
+        <div class="tl-title">MSc Sports Data Science</div>
+        <div class="tl-org">University of Edinburgh — Distinction</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-year">2023</div>
+        <div class="tl-title">UEFA B Coaching License</div>
+        <div class="tl-org">UEFA — Elite Youth Track</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-year">2023</div>
+        <div class="tl-title">Deep Learning Specialization</div>
+        <div class="tl-org">DeepLearning.AI / Coursera</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-year">2022</div>
+        <div class="tl-title">BSc Sports Science & Biomechanics</div>
+        <div class="tl-org">Loughborough University — First Class Honours</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-year">2022</div>
+        <div class="tl-title">StatsBomb Data Analysis Certificate</div>
+        <div class="tl-org">StatsBomb — Advanced Track</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section id="contact">
+  <div class="section-inner">
+    <div class="section-label">Signal Received</div>
+    <h2 class="section-title">Get In Touch</h2>
+    <div class="contact-grid">
+      <div class="contact-info">
+        <p>Available for consulting, research collaboration, and full-time roles at clubs, federations, and sports tech organizations operating at the frontier of performance science.</p>
+        <div class="contact-links">
+          <a href="mailto:analyst@pitchanalytics.io" class="contact-link">
+            <svg class="contact-link-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+            <span class="contact-link-text">analyst@pitchanalytics.io</span>
+          </a>
+          <a href="#" class="contact-link">
+            <svg class="contact-link-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            <span class="contact-link-text">linkedin.com/in/pitchanalytics</span>
+          </a>
+          <a href="#" class="contact-link">
+            <svg class="contact-link-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+            <span class="contact-link-text">github.com/pitchanalytics</span>
+          </a>
+        </div>
+      </div>
+      <div class="contact-form">
+        <div class="form-field">
+          <label class="form-label">Name</label>
+          <input class="form-input" type="text" placeholder="Your name">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Email</label>
+          <input class="form-input" type="email" placeholder="your@email.com">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Subject</label>
+          <input class="form-input" type="text" placeholder="Consulting / Research / Role">
+        </div>
+        <div class="form-field">
+          <label class="form-label">Message</label>
+          <textarea class="form-textarea" placeholder="Tell me about your project or opportunity..."></textarea>
+        </div>
+        <button class="btn-send">Transmit Message →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-logo">PitchAnalytics</div>
+  <div class="footer-copy">© 2025 PitchAnalytics · Football Data Science Lab</div>
+</footer>
+
+<script>
+/* ====================== CURSOR ====================== */
+const cursor = document.getElementById('cursor');
+const ring = document.getElementById('cursor-ring');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY;cursor.style.left=mx+'px';cursor.style.top=my+'px'});
+function animRing(){rx+=(mx-rx)*0.12;ry+=(my-ry)*0.12;ring.style.left=rx+'px';ring.style.top=ry+'px';requestAnimationFrame(animRing)}
+animRing();
+document.querySelectorAll('a,button,.project-card,.research-item,.video-card,.tac-btn').forEach(el=>{
+  el.addEventListener('mouseenter',()=>{ring.style.width='64px';ring.style.height='64px';ring.style.borderColor='rgba(0,255,159,0.8)'});
+  el.addEventListener('mouseleave',()=>{ring.style.width='40px';ring.style.height='40px';ring.style.borderColor='rgba(0,255,159,0.4)'});
+});
+
+/* ====================== THREE.JS HERO ====================== */
+const canvas = document.getElementById('hero-canvas');
+const renderer = new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth,window.innerHeight);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60,window.innerWidth/window.innerHeight,0.1,1000);
+camera.position.set(0,8,16);
+camera.lookAt(0,0,0);
+
+// PITCH
+const pitchGeo = new THREE.PlaneGeometry(22,14);
+const pitchMat = new THREE.MeshBasicMaterial({color:0x0A1A0F,transparent:true,opacity:0.6});
+const pitch = new THREE.Mesh(pitchGeo,pitchMat);
+pitch.rotation.x=-Math.PI/2;
+scene.add(pitch);
+
+// PITCH LINES
+function addLine(pts,color=0x00FF9F,opacity=0.4){
+  const geo=new THREE.BufferGeometry().setFromPoints(pts.map(p=>new THREE.Vector3(p[0],0.01,p[1])));
+  const mat=new THREE.LineBasicMaterial({color,transparent:true,opacity});
+  scene.add(new THREE.Line(geo,mat));
+}
+// Outline
+addLine([[-11,-7],[11,-7],[11,7],[-11,7],[-11,-7]]);
+// Centre
+addLine([[0,-7],[0,7]],0x00FF9F,0.25);
+// Centre circle
+const cc=[];for(let i=0;i<=64;i++){const a=i/64*Math.PI*2;cc.push([Math.cos(a)*2.5,Math.sin(a)*2.5])}
+addLine(cc,0x00FF9F,0.25);
+// Penalty boxes
+addLine([[-11,-3],[-7.5,-3],[-7.5,3],[-11,3]],0x00FF9F,0.2);
+addLine([[11,-3],[7.5,-3],[7.5,3],[11,3]],0x00FF9F,0.2);
+
+// GRID
+const gridHelper=new THREE.GridHelper(24,24,0x00FF9F,0x00FF9F);
+gridHelper.material.transparent=true;gridHelper.material.opacity=0.04;
+gridHelper.position.y=0.005;scene.add(gridHelper);
+
+// HEATMAP PARTICLES
+const heatCount=300;
+const heatGeo=new THREE.BufferGeometry();
+const heatPos=new Float32Array(heatCount*3);
+const heatCol=new Float32Array(heatCount*3);
+for(let i=0;i<heatCount;i++){
+  const x=(Math.random()-0.5)*20;const z=(Math.random()-0.5)*12;
+  heatPos[i*3]=x;heatPos[i*3+1]=0.05+Math.random()*0.2;heatPos[i*3+2]=z;
+  const t=Math.random();
+  heatCol[i*3]=t>0.5?0:0;heatCol[i*3+1]=t*1.0;heatCol[i*3+2]=t<0.5?1.0:0;
+}
+heatGeo.setAttribute('position',new THREE.BufferAttribute(heatPos,3));
+heatGeo.setAttribute('color',new THREE.BufferAttribute(heatCol,3));
+const heatMat=new THREE.PointsMaterial({size:0.3,vertexColors:true,transparent:true,opacity:0.5,blending:THREE.AdditiveBlending});
+const heatPoints=new THREE.Points(heatGeo,heatMat);
+scene.add(heatPoints);
+
+// PLAYER NODES
+const playerPositions=[
+  [0,0],[4,0],[-4,0],[2,4],[-2,4],[2,-4],[-2,-4],
+  [8,2],[8,-2],[-8,2],[-8,-2],
+];
+const playerMeshes=[];
+playerPositions.forEach(([x,z])=>{
+  const g=new THREE.SphereGeometry(0.18,16,16);
+  const m=new THREE.MeshBasicMaterial({color:0x00FF9F});
+  const mesh=new THREE.Mesh(g,m);
+  mesh.position.set(x,0.18,z);
+  mesh.userData={ox:x,oz:z};
+  scene.add(mesh);playerMeshes.push(mesh);
+});
+
+// PASSING ARCS
+const arcGroup=new THREE.Group();scene.add(arcGroup);
+function buildArcs(){
+  arcGroup.clear();
+  const connections=[[0,1],[0,2],[1,3],[2,4],[3,5],[4,6],[1,7],[2,8],[5,9],[6,10],[7,9],[8,10]];
+  connections.forEach(([a,b])=>{
+    const pa=playerMeshes[a].position;const pb=playerMeshes[b].position;
+    const pts=[];const n=32;
+    for(let i=0;i<=n;i++){
+      const t=i/n;const x=pa.x+(pb.x-pa.x)*t;const z=pa.z+(pb.z-pa.z)*t;
+      const h=Math.sin(Math.PI*t)*0.8;pts.push(new THREE.Vector3(x,h,z));
+    }
+    const geo=new THREE.BufferGeometry().setFromPoints(pts);
+    const mat=new THREE.LineBasicMaterial({color:0x00D1FF,transparent:true,opacity:0.15,blending:THREE.AdditiveBlending});
+    arcGroup.add(new THREE.Line(geo,mat));
+  });
+}buildArcs();
+
+// DATA FLOW PARTICLES
+const flowCount=200;
+const flowGeo=new THREE.BufferGeometry();
+const flowPos=new Float32Array(flowCount*3);
+const flowSpeeds=new Float32Array(flowCount);
+for(let i=0;i<flowCount;i++){
+  flowPos[i*3]=(Math.random()-0.5)*24;flowPos[i*3+1]=Math.random()*3;flowPos[i*3+2]=(Math.random()-0.5)*16;
+  flowSpeeds[i]=0.005+Math.random()*0.02;
+}
+flowGeo.setAttribute('position',new THREE.BufferAttribute(flowPos,3));
+const flowMat=new THREE.PointsMaterial({size:0.05,color:0x00FF9F,transparent:true,opacity:0.4,blending:THREE.AdditiveBlending});
+const flowPoints=new THREE.Points(flowGeo,flowMat);
+scene.add(flowPoints);
+
+// MOUSE PARALLAX
+let targetRotX=0,targetRotY=0,curRotX=0,curRotY=0;
+document.addEventListener('mousemove',e=>{
+  targetRotY=(e.clientX/window.innerWidth-0.5)*0.3;
+  targetRotX=(e.clientY/window.innerHeight-0.5)*0.15;
+});
+
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+let t=0;
+function animateHero(){
+  requestAnimationFrame(animateHero);
+  t+=0.005;
+  // Camera parallax
+  curRotX+=(targetRotX-curRotX)*0.05;
+  curRotY+=(targetRotY-curRotY)*0.05;
+  camera.position.x=Math.sin(curRotY)*2;
+  camera.position.z=16+Math.sin(curRotX)*1;
+  camera.position.y=8+curRotX*2;
+  camera.lookAt(0,0,0);
+  // Animate players
+  playerMeshes.forEach((m,i)=>{
+    m.position.x=m.userData.ox+Math.sin(t+i*0.7)*0.3;
+    m.position.z=m.userData.oz+Math.cos(t+i*0.5)*0.2;
+  });
+  // Reanimate arcs
+  if(Math.floor(t*2)%3===0&&Math.floor(t*2)!==animateHero._lastArc){
+    buildArcs();animateHero._lastArc=Math.floor(t*2);
+  }
+  // Flow particles
+  const fp=flowGeo.attributes.position;
+  for(let i=0;i<flowCount;i++){
+    fp.array[i*3+1]-=flowSpeeds[i];
+    if(fp.array[i*3+1]<0){fp.array[i*3+1]=3}
+  }fp.needsUpdate=true;
+  // Heat pulsate
+  heatMat.opacity=0.35+Math.sin(t*2)*0.15;
+  renderer.render(scene,camera);
+}
+animateHero();
+
+/* ====================== GSAP HERO INTRO ====================== */
+if(window.gsap){
+  gsap.registerPlugin(ScrollTrigger);
+  const tl=gsap.timeline({delay:0.5});
+  tl.to('.hero-label',{opacity:1,y:0,duration:0.8,ease:'power3.out'})
+    .to('.hero-title',{opacity:1,y:0,duration:1,ease:'power3.out'},'-=0.4')
+    .to('.hero-sub',{opacity:1,y:0,duration:0.8,ease:'power3.out'},'-=0.6')
+    .to('.hero-btns',{opacity:1,y:0,duration:0.8,ease:'power3.out'},'-=0.5')
+    .to('.scroll-hint',{opacity:1,duration:0.6},'-=0.2');
+  // Scroll fade canvas
+  ScrollTrigger.create({
+    trigger:'#hero',start:'top top',end:'bottom top',
+    onUpdate:self=>{renderer.domElement.style.opacity=1-self.progress*0.8}
+  });
+}
+
+/* ====================== MINI VISUALIZATIONS ====================== */
+function drawMiniViz(id,type){
+  const canvas=document.getElementById(id);if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  canvas.width=canvas.offsetWidth||240;canvas.height=60;
+  const w=canvas.width,h=canvas.height;
+  ctx.clearRect(0,0,w,h);
+  if(type==='xg'){
+    // Shot probability curve
+    const gradient=ctx.createLinearGradient(0,0,w,0);
+    gradient.addColorStop(0,'rgba(0,255,159,0)');
+    gradient.addColorStop(1,'rgba(0,255,159,0.3)');
+    ctx.beginPath();ctx.moveTo(0,h);
+    for(let x=0;x<=w;x++){const y=h-(Math.pow(x/w,1.5)*h*0.9);ctx.lineTo(x,y)}
+    ctx.lineTo(w,h);ctx.closePath();ctx.fillStyle=gradient;ctx.fill();
+    ctx.beginPath();ctx.moveTo(0,h);
+    for(let x=0;x<=w;x++){const y=h-(Math.pow(x/w,1.5)*h*0.9);ctx.lineTo(x,y)}
+    ctx.strokeStyle='rgba(0,255,159,0.8)';ctx.lineWidth=1.5;ctx.stroke();
+    // Dots
+    [[0.2,0.3],[0.5,0.6],[0.8,0.85],[0.95,0.92]].forEach(([nx,ny])=>{
+      ctx.beginPath();ctx.arc(nx*w,(1-ny)*h,3,0,Math.PI*2);
+      ctx.fillStyle=`rgba(0,255,159,${ny})`;ctx.fill();
+    });
+  } else if(type==='cluster'){
+    const clusters=[{cx:0.2,cy:0.4,col:'#00FF9F'},{cx:0.6,cy:0.6,col:'#00D1FF'},{cx:0.8,cy:0.2,col:'#FF6B6B'}];
+    clusters.forEach(({cx,cy,col})=>{
+      for(let i=0;i<12;i++){
+        const x=cx*w+(Math.random()-0.5)*w*0.22;const y=cy*h+(Math.random()-0.5)*h*0.5;
+        ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);ctx.fillStyle=col+'aa';ctx.fill();
+      }
+    });
+  } else if(type==='load'){
+    const bars=[0.3,0.5,0.7,0.55,0.8,0.6,0.4];
+    bars.forEach((v,i)=>{
+      const bw=w/bars.length-4;const bx=i*(w/bars.length)+2;const bh=v*h*0.85;
+      const g=ctx.createLinearGradient(0,h-bh,0,h);
+      g.addColorStop(0,'rgba(0,255,159,0.9)');g.addColorStop(1,'rgba(0,209,255,0.3)');
+      ctx.fillStyle=g;ctx.fillRect(bx,h-bh,bw,bh);
+    });
+  } else if(type==='network'){
+    const nodes=[[0.15,0.5],[0.4,0.2],[0.4,0.8],[0.7,0.4],[0.9,0.5]];
+    const edges=[[0,1],[0,2],[1,3],[2,3],[3,4]];
+    edges.forEach(([a,b])=>{
+      ctx.beginPath();ctx.moveTo(nodes[a][0]*w,nodes[a][1]*h);ctx.lineTo(nodes[b][0]*w,nodes[b][1]*h);
+      ctx.strokeStyle='rgba(0,209,255,0.4)';ctx.lineWidth=1;ctx.stroke();
+    });
+    nodes.forEach(([nx,ny],i)=>{
+      ctx.beginPath();ctx.arc(nx*w,ny*h,4,0,Math.PI*2);
+      ctx.fillStyle=i===3?'#00FF9F':'rgba(0,209,255,0.8)';ctx.fill();
+    });
+  } else if(type==='cv'){
+    // Grid
+    for(let i=0;i<6;i++){for(let j=0;j<4;j++){
+      ctx.strokeStyle=`rgba(0,255,159,${0.05+Math.random()*0.2})`;
+      ctx.strokeRect(i*w/6,j*h/4,w/6,h/4);
+    }}
+    ctx.beginPath();ctx.arc(w*0.5,h*0.5,h*0.3,0,Math.PI*2);
+    ctx.strokeStyle='rgba(0,255,159,0.6)';ctx.lineWidth=1.5;ctx.stroke();
+  } else {
+    // Value bars
+    const vals=[0.4,0.7,0.9,0.6,0.8];
+    vals.forEach((v,i)=>{
+      ctx.fillStyle=`rgba(0,255,159,${v*0.6})`;
+      ctx.fillRect(i*(w/vals.length)+2,h*(1-v),w/vals.length-4,h*v);
+    });
+  }
+}
+setTimeout(()=>{
+  drawMiniViz('viz1','xg');drawMiniViz('viz2','cluster');drawMiniViz('viz3','load');
+  drawMiniViz('viz4','network');drawMiniViz('viz5','cv');drawMiniViz('viz6','default');
+},500);
+
+/* ====================== TACTICAL BOARD ====================== */
+const formations={
+  '433':{name:'4-3-3',players:[
+    {x:0.5,y:0.92,r:'GK'},{x:0.2,y:0.72,r:'LB'},{x:0.38,y:0.72,r:'CB'},{x:0.62,y:0.72,r:'CB'},{x:0.8,y:0.72,r:'RB'},
+    {x:0.3,y:0.48,r:'CM'},{x:0.5,y:0.42,r:'CDM'},{x:0.7,y:0.48,r:'CM'},
+    {x:0.2,y:0.2,r:'LW'},{x:0.5,y:0.15,r:'ST'},{x:0.8,y:0.2,r:'RW'}
+  ]},
+  '442':{name:'4-4-2',players:[
+    {x:0.5,y:0.92,r:'GK'},{x:0.2,y:0.72,r:'LB'},{x:0.38,y:0.72,r:'CB'},{x:0.62,y:0.72,r:'CB'},{x:0.8,y:0.72,r:'RB'},
+    {x:0.18,y:0.48,r:'LM'},{x:0.38,y:0.5,r:'CM'},{x:0.62,y:0.5,r:'CM'},{x:0.82,y:0.48,r:'RM'},
+    {x:0.35,y:0.18,r:'ST'},{x:0.65,y:0.18,r:'ST'}
+  ]},
+  '352':{name:'3-5-2',players:[
+    {x:0.5,y:0.92,r:'GK'},{x:0.3,y:0.72,r:'CB'},{x:0.5,y:0.7,r:'CB'},{x:0.7,y:0.72,r:'CB'},
+    {x:0.12,y:0.48,r:'LWB'},{x:0.3,y:0.46,r:'CM'},{x:0.5,y:0.42,r:'DM'},{x:0.7,y:0.46,r:'CM'},{x:0.88,y:0.48,r:'RWB'},
+    {x:0.35,y:0.18,r:'ST'},{x:0.65,y:0.18,r:'ST'}
+  ]},
+  '4231':{name:'4-2-3-1',players:[
+    {x:0.5,y:0.92,r:'GK'},{x:0.2,y:0.73,r:'LB'},{x:0.38,y:0.73,r:'CB'},{x:0.62,y:0.73,r:'CB'},{x:0.8,y:0.73,r:'RB'},
+    {x:0.35,y:0.54,r:'DM'},{x:0.65,y:0.54,r:'DM'},
+    {x:0.18,y:0.3,r:'LM'},{x:0.5,y:0.28,r:'CAM'},{x:0.82,y:0.3,r:'RM'},
+    {x:0.5,y:0.12,r:'ST'}
+  ]}
+};
+let currentFormation='433';
+const tacCanvas=document.getElementById('tactical-canvas');
+const tacCtx=tacCanvas.getContext('2d');
+let tacW=0,tacH=0;
+function resizeTac(){
+  const wrap=document.getElementById('tactical-canvas-wrap');
+  tacW=wrap.clientWidth;tacH=Math.round(tacW*0.65);
+  tacCanvas.width=tacW;tacCanvas.height=tacH;drawTactical();}
+function drawTactical(){
+  tacCtx.clearRect(0,0,tacW,tacH);
+  // Pitch bg
+  const pg=tacCtx.createLinearGradient(0,0,0,tacH);
+  pg.addColorStop(0,'#0A1F12');pg.addColorStop(1,'#061209');
+  tacCtx.fillStyle=pg;tacCtx.fillRect(0,0,tacW,tacH);
+  // Stripes
+  for(let i=0;i<8;i++){
+    tacCtx.fillStyle=i%2===0?'rgba(0,255,159,0.02)':'transparent';
+    tacCtx.fillRect(0,(tacH/8)*i,tacW,tacH/8);}
+  tacCtx.strokeStyle='rgba(0,255,159,0.5)';tacCtx.lineWidth=1.5;
+  // Outline
+  const m=20;
+  tacCtx.strokeRect(m,m,tacW-m*2,tacH-m*2);
+  // Halfway
+  tacCtx.beginPath();tacCtx.moveTo(m,tacH/2);tacCtx.lineTo(tacW-m,tacH/2);tacCtx.stroke();
+  // Centre circle
+  tacCtx.beginPath();tacCtx.arc(tacW/2,tacH/2,tacH*0.12,0,Math.PI*2);tacCtx.globalAlpha=0.4;tacCtx.stroke();tacCtx.globalAlpha=1;
+  // Penalty boxes
+  const pbw=(tacW-m*2)*0.45,pbh=(tacH-m*2)*0.2;
+  tacCtx.globalAlpha=0.3;
+  tacCtx.strokeRect(tacW/2-pbw/2,m,pbw,pbh);
+  tacCtx.strokeRect(tacW/2-pbw/2,tacH-m-pbh,pbw,pbh);
+  tacCtx.globalAlpha=1;
+  // Players
+  const f=formations[currentFormation];
+  f.players.forEach((p,i)=>{
+    const px=p.x*(tacW-m*2)+m;const py=p.y*(tacH-m*2)+m;
+    // Glow
+    const grd=tacCtx.createRadialGradient(px,py,0,px,py,18);
+    grd.addColorStop(0,'rgba(0,255,159,0.2)');grd.addColorStop(1,'transparent');
+    tacCtx.fillStyle=grd;tacCtx.beginPath();tacCtx.arc(px,py,18,0,Math.PI*2);tacCtx.fill();
+    // Player dot
+    tacCtx.beginPath();tacCtx.arc(px,py,8,0,Math.PI*2);
+    tacCtx.fillStyle='#00FF9F';tacCtx.fill();
+    tacCtx.strokeStyle='#0B0F14';tacCtx.lineWidth=2;tacCtx.stroke();
+    // Label
+    tacCtx.fillStyle='rgba(232,237,242,0.7)';tacCtx.font=`bold 9px 'JetBrains Mono',monospace`;
+    tacCtx.textAlign='center';tacCtx.fillText(p.r,px,py-14);
+  });
+  // Connecting lines
+  tacCtx.strokeStyle='rgba(0,255,159,0.08)';tacCtx.lineWidth=1;
+  f.players.forEach((p,i)=>{
+    f.players.slice(i+1).forEach(q=>{
+      const dist=Math.hypot((p.x-q.x),(p.y-q.y));
+      if(dist<0.35){
+        tacCtx.beginPath();
+        tacCtx.moveTo(p.x*(tacW-m*2)+m,p.y*(tacH-m*2)+m);
+        tacCtx.lineTo(q.x*(tacW-m*2)+m,q.y*(tacH-m*2)+m);
+        tacCtx.stroke();
+      }
+    });
+  });
+}
+function setFormation(f){
+  currentFormation=f;
+  document.querySelectorAll('.tac-btn').forEach(b=>{
+    b.classList.toggle('active',b.textContent.replace('-','').replace('-','')===f.replace('-',''));
+    // simple match
+  });
+  document.querySelectorAll('.tac-btn').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  drawTactical();
+}
+setTimeout(()=>{resizeTac()},100);
+window.addEventListener('resize',resizeTac);
+
+/* ====================== SCROLL ANIMATIONS ====================== */
+if(window.gsap&&window.ScrollTrigger){
+  const fadeEls=['.section-label','.section-title','.about-text','.stat-box','.project-card','.research-item','.phi-point','.tl-item','.video-card'];
+  fadeEls.forEach(sel=>{
+    gsap.utils.toArray(sel).forEach((el,i)=>{
+      gsap.from(el,{opacity:0,y:30,duration:0.7,delay:i*0.08,ease:'power2.out',
+        scrollTrigger:{trigger:el,start:'top 88%',toggleActions:'play none none none'}});
+    });
+  });
+}
+</script>
+</body>
+</html>
